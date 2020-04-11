@@ -28,7 +28,8 @@ import {
     compose,
     equals,
     always,
-    when, applySpec, identity
+    concat,
+    when, applySpec, identity, flip, toString, has
 } from "ramda";
 
 const api = new Api();
@@ -42,7 +43,16 @@ const composeAsync = function() {
     return (currentData) => {
         return funcs.reduce(async (res, f) => {
             if(res instanceof Promise) {
-                const result = await res;
+                let result = null;
+                try {
+                    result = await res;
+                } catch (e) {
+                    if(typeof e === 'object') {
+                        result = {error: JSON.stringify(e)};
+                    } else {
+                        result = { error: e };
+                    }
+                }
                 return f(result);
             } else {
                 return f(res)
@@ -54,8 +64,9 @@ const composeAsync = function() {
 
 const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
     const numberConverter = api.get('https://api.tech/numbers/base');
-    const fetchAnimal = api.get('https://animals.tech/');
     const writeLogTapped = tap(writeLog);
+    const animalEndPoint = 'https://animals.tech/';
+    const fetchAnimal = flip(api.get)({stub: true});
 
     ifElse(
         allPass([
@@ -64,18 +75,32 @@ const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
             test(/^(([1-9][0-9]*)|0)(\.\d+)?$/s)
         ]),
         composeAsync(
-            handleSuccess,
-            prop('result'),
-            fetchAnimal,
-            applySpec({ id: identity }),
-            writeLogTapped,
-            (a) => a % 3,
-            writeLogTapped,
-            partialRight(Math.pow, [2]),
-            writeLogTapped,
-            stringLength,
-            writeLogTapped,
-            prop('result'),
+            ifElse(
+                has('error'),
+                compose(handleError, prop('error')),
+                compose(
+                    composeAsync(
+                        ifElse(
+                            has('error'),
+                            compose(handleError, prop('error')),
+                            compose(
+                                handleSuccess,
+                                prop('result'),
+                            )
+                        ),
+                        fetchAnimal
+                    ),
+                    compose(concat(animalEndPoint), toString),
+                    writeLogTapped,
+                    (a) => a % 3,
+                    writeLogTapped,
+                    partialRight(Math.pow, [2]),
+                    writeLogTapped,
+                    stringLength,
+                    writeLogTapped,
+                    prop('result')
+                )
+            ),
             numberConverter,
             applySpec({
                 from: always(10),
@@ -83,10 +108,7 @@ const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
                 number: identity
             }),
             writeLogTapped,
-            when(
-                equals(0),
-                always(1)
-            ),
+            when(equals(0), always(1)),
             Math.round
         ),
         partial(handleError, ['ValidationError'])
