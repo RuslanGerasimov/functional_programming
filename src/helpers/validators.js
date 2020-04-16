@@ -29,8 +29,9 @@ import {
     uniq,
     map,
     filter,
-    toPairs
+    toPairs, fromPairs, ifElse, identity, always, tap, flip
 } from "ramda";
+
 const FIGURE_STAR = 'star';
 const FIGURE_SQUARE = 'square';
 const FIGURE_TRIANGLE = 'triangle';
@@ -42,78 +43,65 @@ const blue = 'blue';
 const red = 'red';
 const orange = 'orange';
 
+const checkIfHasOnlyColor = compose(equals(1), length, keys, invert);
+const allFiguresAreOfSameColor = (color) => allPass([compose(has(color), invert), checkIfHasOnlyColor]);
+const checkFigureColor = (figure, color) => compose(equals(color), prop(figure));
+const getColorQuantity = (color) => compose(length, prop(color), invert);
+const checkColorQuantityMoreEqual = (color, number) => compose(lte(number), getColorQuantity(color));
+const checkColorQuantityEqual = (color, number) => compose(equals(number), getColorQuantity(color));
 
-const allFiguresAreOfSameColor = (color) => {
-    return allPass([
-        compose(has(orange), invert),
-        compose(equals(1), length, keys, invert),
-    ])
-};
-
+const getColorsQuantityMap = compose(map(length), invert);
+const isRedStar = checkFigureColor(FIGURE_STAR, red);
+const isGreenTriangle = checkFigureColor(FIGURE_TRIANGLE, green);
+const isGreenSquare = checkFigureColor(FIGURE_SQUARE, green);
+const isBlueCircle = checkFigureColor(FIGURE_CIRCLE, blue);
+const isOrangeSquare = checkFigureColor(FIGURE_SQUARE, orange);
+const isWhiteMoreEqualTwo = checkColorQuantityMoreEqual(white, 2);
+const isGreenMoreEqualTwo = checkColorQuantityMoreEqual(green, 2);
+const isGreenEqualTwo = checkColorQuantityEqual(green, 2);
+const isRedEqualOne = checkColorQuantityEqual(red, 1);
 
 // 1. Красная звезда, зеленый квадрат, все остальные белые.
-export const validateFieldN1 = (data) => {
-    return allPass([
-        compose(equals(red), prop(FIGURE_STAR)),
-        compose(equals(green), prop(FIGURE_SQUARE)),
-        compose(lte(2), length, prop(white), invert),
-    ])(data);
-};
+export const validateFieldN1 = allPass([isRedStar, isGreenSquare, isWhiteMoreEqualTwo]);
 
 // 2. Как минимум две фигуры зеленые.
-export const validateFieldN2 = (data) => {
-    return compose(lte(2), length, prop(green), invert)(data);
-};
+export const validateFieldN2 = isGreenMoreEqualTwo;
 
 // 3. Количество красных фигур равно кол-ву синих.
-export const validateFieldN3 = (data) => {
-    const equalArray = (arr) => equals(...arr);
-    return  compose(equalArray, map(length), props([red, blue]), invert)(data);
-};
+export const validateFieldN3 = compose((arr) => equals(...arr), props([red, blue]), getColorsQuantityMap);
 
 // 4. Синий круг, красная звезда, оранжевый квадрат
-export const validateFieldN4 = (data) => {
-    return allPass([
-        compose(equals(red), prop(FIGURE_STAR)),
-        compose(equals(blue), prop(FIGURE_CIRCLE)),
-        compose(equals(orange), prop(FIGURE_SQUARE)),
-    ])(data);
-};
+export const validateFieldN4 = allPass([isRedStar, isBlueCircle, isOrangeSquare]);
 
 // 5. Три фигуры одного любого цвета кроме белого (четыре фигуры одного цвета – это тоже true).
-export const validateFieldN5 = (data) => {
-    return compose(equals(1), length, filter((arr) => arr[0] !== white && arr[1].length >= 3), toPairs, invert)(data)
-};
+export const validateFieldN5 = compose(
+    not,
+    has(white),
+    fromPairs,
+    ifElse(
+        compose(lte(1), length),
+        identity,
+        always([[white, 3]])
+    ),
+    filter((ar) => ar[1] >= 3),
+    toPairs,
+    getColorsQuantityMap
+);
 
 // 6. Две зеленые фигуры (одна из них треугольник), еще одна любая красная.
-export const validateFieldN6 = (data) => {
-    return allPass([
-        compose(equals(2), length, prop(green), invert),
-        compose(equals(green), prop(FIGURE_TRIANGLE)),
-        compose(equals(1), length, prop(red), invert)
-    ])(data)
-};
+export const validateFieldN6 = allPass([isGreenEqualTwo, isRedEqualOne, isGreenTriangle]);
 
 // 7. Все фигуры оранжевые.
-export const validateFieldN7 = (data) => {
-    return compose(allFiguresAreOfSameColor(orange))(data);
-};
+export const validateFieldN7 = allFiguresAreOfSameColor(orange);
 
 // 8. Не красная и не белая звезда.
-export const validateFieldN8 = (data) => {
-    const includeWhiteOrRed = partialRight(includes, [[white, red]]);
-    return compose(not, includeWhiteOrRed, prop(FIGURE_STAR))(data)
-};
+export const validateFieldN8 = compose(not, flip(includes)([white, red]), prop(FIGURE_STAR));
 
 // 9. Все фигуры зеленые.
-export const validateFieldN9 = (data) => {
-    return compose(allFiguresAreOfSameColor(green))(data);
-};
+export const validateFieldN9 = compose(allFiguresAreOfSameColor(green));
 
 // 10. Треугольник и квадрат одного цвета (не белого)
-export const validateFieldN10 = (data) => {
-    return allPass([
-        compose(equals(1), length, uniq, props([FIGURE_TRIANGLE, FIGURE_SQUARE])),
-        compose(not, equals(white), prop(FIGURE_TRIANGLE))
-    ])(data)
-};
+export const validateFieldN10 = allPass([
+    compose(equals(1), length, uniq, props([FIGURE_TRIANGLE, FIGURE_SQUARE])),
+    compose(not, equals(white), prop(FIGURE_TRIANGLE))
+]);
